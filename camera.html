@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-950 text-slate-100">
+<head>
+  <link rel="manifest" href="manifest.json">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>LGU Lagonoy MDRRMO Offline Camera</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            mdrrmo: {
+              green: '#046a3c',
+              darkGreen: '#034d2b',
+              orange: '#fc7c04',
+              orangeHover: '#e06b00',
+              yellow: '#ffcc00'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.6);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #046a3c;
+      border-radius: 4px;
+    }
+    video, canvas {
+      transform: translateZ(0);
+    }
+  </style>
+</head>
+<body class="h-full flex flex-col font-sans overflow-hidden select-none bg-slate-950 text-slate-100">
+
+  <!-- TOP HEADER / APP BAR -->
+  <header class="bg-mdrrmo-darkGreen/90 backdrop-blur border-b border-mdrrmo-green px-4 py-2.5 flex items-center justify-between z-20 shrink-0 shadow-md">
+    <div class="flex items-center space-x-2">
+      <div class="w-9 h-9 rounded-lg bg-mdrrmo-orange flex items-center justify-center text-slate-950 shadow-lg font-bold">
+        <i data-lucide="shield-alert" class="w-5 h-5 text-slate-950"></i>
+      </div>
+      <div>
+        <h1 class="text-xs font-black tracking-wider uppercase text-white flex items-center gap-1.5">
+          MDRRMO LAGONOY
+          <span class="text-[9px] bg-mdrrmo-orange text-slate-950 font-bold px-1.5 py-0.5 rounded">CAM</span>
+        </h1>
+        <p class="text-[10px] text-emerald-300 font-mono truncate max-w-[180px]" id="header-status">GPS: Searching satellite...</p>
+      </div>
+    </div>
+
+    <!-- Top Action Controls -->
+    <div class="flex items-center space-x-2">
+      <button id="btn-gallery-trigger" class="p-2 rounded-lg bg-slate-900/80 hover:bg-slate-800 border border-slate-700 text-slate-200 transition relative" title="Saved Photos">
+        <i data-lucide="image" class="w-5 h-5"></i>
+        <span id="gallery-badge" class="hidden absolute -top-1 -right-1 bg-mdrrmo-orange text-slate-950 text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">0</span>
+      </button>
+      <button id="btn-settings-trigger" class="p-2 rounded-lg bg-slate-900/80 hover:bg-slate-800 border border-slate-700 text-slate-200 transition" title="Banner & Contact Settings">
+        <i data-lucide="sliders" class="w-5 h-5"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- MAIN VIEWFINDER CONTAINER -->
+  <main class="relative flex-1 bg-black flex items-center justify-center overflow-hidden">
+    <!-- Camera Stream Video Tag -->
+    <video id="camera-feed" autoplay playsinline muted class="w-full h-full object-cover transition-transform duration-200"></video>
+
+    <!-- Canvas (Hidden, used for high-res photo compositing & export) -->
+    <canvas id="capture-canvas" class="hidden"></canvas>
+
+    <!-- ZOOM LEVEL FLOATING QUICK CONTROLS (1x, 1.5x, 2x) -->
+    <div class="absolute top-4 inset-x-0 flex justify-center z-10 pointer-events-auto">
+      <div class="bg-slate-950/75 backdrop-blur border border-slate-700/80 p-1 rounded-full flex items-center space-x-1 shadow-xl">
+        <button id="btn-zoom-1" class="px-3 py-1 rounded-full text-xs font-bold text-slate-950 bg-mdrrmo-orange shadow transition">1x</button>
+        <button id="btn-zoom-15" class="px-3 py-1 rounded-full text-xs font-bold text-slate-300 hover:text-white transition">1.5x</button>
+        <button id="btn-zoom-2" class="px-3 py-1 rounded-full text-xs font-bold text-slate-300 hover:text-white transition">2x</button>
+      </div>
+    </div>
+
+    <!-- LIVE WATERMARK & BANNER PREVIEW OVERLAY ON VIEWFINDER -->
+    <div id="live-banner-container" class="absolute bottom-20 inset-x-2 pointer-events-none z-10 flex flex-col space-y-1">
+      
+      <!-- GPS Metadata Overlay Badge -->
+      <div class="self-start bg-slate-950/85 backdrop-blur-md border border-emerald-500/50 rounded-lg p-2 text-white shadow-2xl font-mono text-[10px] space-y-0.5 max-w-[85%]">
+        <div class="text-mdrrmo-orange font-bold text-xs" id="wm-office-title">LGU LAGONOY MDRRMO FIELD INSPECTION</div>
+        <div class="text-emerald-400 font-semibold" id="wm-gps">LAT: --.-- LON: --.-- (±--)</div>
+        <div class="text-slate-300 text-[9px]" id="wm-datetime">2026-00-00 00:00:00</div>
+        <div class="text-slate-400 text-[9px] truncate" id="wm-contact">Hotline: (054) 881-1234 | Emergency 911</div>
+      </div>
+
+      <!-- MDRRMO Banner Preview -->
+      <div class="w-full bg-slate-950/90 border border-mdrrmo-green rounded-lg overflow-hidden shadow-2xl flex flex-col">
+        <!-- Orange Top Bar -->
+        <div class="bg-mdrrmo-orange text-slate-950 font-black text-[8px] sm:text-[10px] text-center tracking-tighter uppercase px-1 py-0.5 truncate">
+          DISASTER PREVENTION & MITIGATION | DISASTER PREPAREDNESS | DISASTER RESPONSE | DISASTER REHABILITATION & RECOVERY
+        </div>
+        <!-- Green MDRRMO Main Bar -->
+        <div class="bg-mdrrmo-darkGreen px-2 py-1.5 flex items-center justify-between gap-2 border-t border-amber-400/30">
+          <div class="flex items-center gap-2">
+            <div class="w-8 h-8 rounded-full bg-white/10 border border-amber-400 flex items-center justify-center shrink-0 overflow-hidden" id="preview-logo-box">
+              <i data-lucide="shield" class="w-4 h-4 text-amber-300" id="preview-logo-placeholder"></i>
+              <img id="preview-logo-img" class="w-full h-full object-contain hidden" alt="Lagonoy Logo">
+            </div>
+            <div class="leading-tight">
+              <div class="text-[9px] sm:text-[11px] font-extrabold text-white tracking-wide uppercase">LOCAL GOVERNMENT UNIT OF LAGONOY</div>
+              <div class="text-[8px] sm:text-[10px] font-black text-amber-300 tracking-wider">MUNICIPAL DISASTER RISK REDUCTION AND MANAGEMENT OFFICE</div>
+            </div>
+          </div>
+          <div class="hidden sm:block text-right text-[8px] font-semibold text-slate-200 border-l border-emerald-500/40 pl-2">
+            <div>Resilience Through Preparedness,</div>
+            <div>Safety Through Service.</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- CAMERA FLOATING CONTROLS (Bottom Shutter Bar) -->
+    <div class="absolute bottom-3 inset-x-0 flex items-center justify-around px-6 z-20 pointer-events-auto">
+      <!-- Switch Facing Camera Button -->
+      <button id="btn-switch-camera" class="w-12 h-12 rounded-full bg-slate-900/80 backdrop-blur border border-slate-700 text-white flex items-center justify-center hover:bg-slate-800 active:scale-95 transition">
+        <i data-lucide="refresh-cw" class="w-5 h-5"></i>
+      </button>
+
+      <!-- Main Capture Button -->
+      <button id="btn-capture" class="w-16 h-16 rounded-full bg-mdrrmo-orange border-4 border-slate-950 flex items-center justify-center shadow-lg shadow-mdrrmo-orange/40 active:scale-90 transition hover:bg-mdrrmo-orangeHover">
+        <div class="w-12 h-12 rounded-full border-2 border-slate-950/40 flex items-center justify-center">
+          <i data-lucide="camera" class="w-7 h-7 text-slate-950"></i>
+        </div>
+      </button>
+
+      <!-- Flash Toggle -->
+      <button id="btn-flash-toggle" class="w-12 h-12 rounded-full bg-slate-900/80 backdrop-blur border border-slate-700 text-slate-300 flex items-center justify-center hover:bg-slate-800 active:scale-95 transition" title="Toggle Flash">
+        <i data-lucide="zap-off" id="flash-icon" class="w-5 h-5"></i>
+      </button>
+    </div>
+  </main>
+
+  <!-- MODAL 1: BANNER & OFFICE CONFIGURATION -->
+  <div id="modal-settings" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-30 hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
+    <div class="bg-slate-900 border border-slate-800 w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden animate-in slide-in-from-bottom duration-200">
+      
+      <!-- Drawer Header -->
+      <div class="px-5 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950">
+        <div class="flex items-center space-x-2">
+          <i data-lucide="shield-alert" class="w-5 h-5 text-mdrrmo-orange"></i>
+          <h2 class="text-base font-bold text-white">MDRRMO Banner & Office Settings</h2>
+        </div>
+        <button id="btn-close-settings" class="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Drawer Body Form -->
+      <div class="p-5 overflow-y-auto space-y-4 text-sm text-slate-200">
+        
+        <!-- Custom Banner Image Upload -->
+        <div>
+          <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Custom Banner Image (Optional)</label>
+          <div class="flex items-center gap-4">
+            <div id="settings-banner-preview" class="w-24 h-12 rounded-lg bg-slate-950 border border-slate-800 flex items-center justify-center overflow-hidden shrink-0">
+              <i data-lucide="image" class="w-6 h-6 text-slate-600"></i>
+            </div>
+            <div class="flex-1 space-y-1">
+              <input type="file" id="input-banner-file" accept="image/png, image/jpeg, image/webp" class="hidden">
+              <label for="input-banner-file" class="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-mdrrmo-green hover:bg-mdrrmo-darkGreen text-white font-medium text-xs cursor-pointer transition">
+                <i data-lucide="upload" class="w-4 h-4"></i> Upload Custom Banner
+              </label>
+              <button id="btn-remove-banner" class="hidden text-xs text-rose-400 hover:underline block pt-1">Reset to Built-in Lagonoy MDRRMO Banner</button>
+              <p class="text-[11px] text-slate-500">If uploaded, this image replaces the built-in MDRRMO bottom overlay.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Editable Metadata Fields -->
+        <div class="space-y-3 pt-2 border-t border-slate-800">
+          <div>
+            <label for="input-office-title" class="block text-xs font-medium text-slate-400 mb-1">Inspection / Report Title</label>
+            <input type="text" id="input-office-title" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-mdrrmo-green text-sm" placeholder="LGU LAGONOY MDRRMO FIELD INSPECTION">
+          </div>
+
+          <div>
+            <label for="input-contact" class="block text-xs font-medium text-slate-400 mb-1">Office Contact / Emergency Hotlines</label>
+            <input type="text" id="input-contact" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-mdrrmo-green text-sm" placeholder="Hotline: (054) 881-1234 | Emergency 911">
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Drawer Footer -->
+      <div class="p-4 border-t border-slate-800 bg-slate-950 flex justify-end">
+        <button id="btn-save-settings" class="px-5 py-2.5 rounded-lg bg-mdrrmo-green hover:bg-mdrrmo-darkGreen text-white font-medium text-sm flex items-center gap-2 shadow-lg">
+          <i data-lucide="check" class="w-4 h-4"></i> Save Settings
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- MODAL 2: SAVED GALLERY VIEW -->
+  <div id="modal-gallery" class="fixed inset-0 bg-black/80 backdrop-blur-md z-30 hidden flex flex-col">
+    <div class="bg-slate-900 border-b border-slate-800 px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center space-x-2">
+        <i data-lucide="images" class="w-5 h-5 text-mdrrmo-orange"></i>
+        <h2 class="text-base font-bold text-white">Stored Stamped Photos (<span id="gallery-count">0</span>)</h2>
+      </div>
+      <button id="btn-close-gallery" class="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800">
+        <i data-lucide="x" class="w-6 h-6"></i>
+      </button>
+    </div>
+
+    <div id="gallery-grid" class="flex-1 overflow-y-auto p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3"></div>
+
+    <div id="gallery-empty" class="hidden flex-1 flex flex-col items-center justify-center p-6 text-center text-slate-500">
+      <i data-lucide="camera-off" class="w-12 h-12 mb-3 text-slate-600"></i>
+      <p class="text-sm font-medium">No photos saved yet.</p>
+    </div>
+  </div>
+
+  <!-- MODAL 3: PHOTO DETAIL & EXPORT DIALOG -->
+  <div id="modal-photo-detail" class="fixed inset-0 bg-black/90 backdrop-blur-md z-40 hidden flex flex-col">
+    <div class="bg-slate-900/90 border-b border-slate-800 px-4 py-3 flex items-center justify-between">
+      <h3 class="text-sm font-semibold text-slate-200 truncate" id="detail-timestamp">Photo Details</h3>
+      <button id="btn-close-detail" class="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800">
+        <i data-lucide="x" class="w-6 h-6"></i>
+      </button>
+    </div>
+
+    <div class="flex-1 overflow-auto p-4 flex items-center justify-center">
+      <img id="detail-image-view" class="max-w-full max-h-full object-contain rounded-lg shadow-2xl border border-slate-800" alt="Stamped Capture">
+    </div>
+
+    <div class="bg-slate-900 border-t border-slate-800 p-4 flex items-center justify-around gap-4">
+      <button id="btn-delete-photo" class="px-4 py-2 rounded-lg bg-rose-950 hover:bg-rose-900 border border-rose-800 text-rose-200 text-xs font-semibold flex items-center gap-2">
+        <i data-lucide="trash-2" class="w-4 h-4"></i> Delete
+      </button>
+      <button id="btn-download-photo" class="px-5 py-2.5 rounded-lg bg-mdrrmo-orange hover:bg-mdrrmo-orangeHover text-slate-950 text-xs font-bold flex items-center gap-2 shadow-lg">
+        <i data-lucide="download" class="w-4 h-4"></i> Save to Phone
+      </button>
+    </div>
+  </div>
+
+  <!-- TOAST CONTAINER -->
+  <div id="toast-container" class="fixed top-16 left-1/2 -translate-x-1/2 z-50 pointer-events-none flex flex-col gap-2 w-full max-w-xs px-4"></div>
+
+  <script>
+    lucide.createIcons();
+
+    /* ==========================================================================
+       STATE MANAGEMENT
+       ========================================================================== */
+    const STATE = {
+      stream: null,
+      facingMode: 'environment',
+      zoomLevel: 1.0, // 1.0, 1.5, 2.0
+      torchOn: false,
+      currentGps: {
+        lat: null,
+        lng: null,
+        alt: null,
+        acc: null,
+        status: 'Searching satellite hardware...'
+      },
+      settings: {
+        officeTitle: 'LGU LAGONOY MDRRMO FIELD INSPECTION',
+        contact: 'Hotline: (054) 881-1234 | Emergency 911',
+        customBannerBase64: null
+      },
+      db: null,
+      activePhotoId: null
+    };
+
+    /* ==========================================================================
+       DOM ELEMENTS
+       ========================================================================== */
+    const DOM = {
+      video: document.getElementById('camera-feed'),
+      canvas: document.getElementById('capture-canvas'),
+      headerStatus: document.getElementById('header-status'),
+      wmOfficeTitle: document.getElementById('wm-office-title'),
+      wmGps: document.getElementById('wm-gps'),
+      wmDateTime: document.getElementById('wm-datetime'),
+      wmContact: document.getElementById('wm-contact'),
+      previewLogoImg: document.getElementById('preview-logo-img'),
+      previewLogoPlaceholder: document.getElementById('preview-logo-placeholder'),
+      // Zoom buttons
+      btnZoom1: document.getElementById('btn-zoom-1'),
+      btnZoom15: document.getElementById('btn-zoom-15'),
+      btnZoom2: document.getElementById('btn-zoom-2'),
+      // Buttons
+      btnCapture: document.getElementById('btn-capture'),
+      btnSwitchCam: document.getElementById('btn-switch-camera'),
+      btnFlashToggle: document.getElementById('btn-flash-toggle'),
+      btnSettingsTrigger: document.getElementById('btn-settings-trigger'),
+      btnGalleryTrigger: document.getElementById('btn-gallery-trigger'),
+      galleryBadge: document.getElementById('gallery-badge'),
+      // Modals
+      modalSettings: document.getElementById('modal-settings'),
+      btnCloseSettings: document.getElementById('btn-close-settings'),
+      btnSaveSettings: document.getElementById('btn-save-settings'),
+      inputOfficeTitle: document.getElementById('input-office-title'),
+      inputContact: document.getElementById('input-contact'),
+      inputBannerFile: document.getElementById('input-banner-file'),
+      settingsBannerPreview: document.getElementById('settings-banner-preview'),
+      btnRemoveBanner: document.getElementById('btn-remove-banner'),
+      // Gallery & Detail Modals
+      modalGallery: document.getElementById('modal-gallery'),
+      btnCloseGallery: document.getElementById('btn-close-gallery'),
+      galleryGrid: document.getElementById('gallery-grid'),
+      galleryEmpty: document.getElementById('gallery-empty'),
+      galleryCount: document.getElementById('gallery-count'),
+      modalPhotoDetail: document.getElementById('modal-photo-detail'),
+      btnCloseDetail: document.getElementById('btn-close-detail'),
+      detailImageView: document.getElementById('detail-image-view'),
+      detailTimestamp: document.getElementById('detail-timestamp'),
+      btnDownloadPhoto: document.getElementById('btn-download-photo'),
+      btnDeletePhoto: document.getElementById('btn-delete-photo')
+    };
+
+    /* ==========================================================================
+       1. INDEXEDDB OFFLINE STORAGE
+       ========================================================================== */
+    function initDatabase() {
+      return new Promise((resolve, reject) => {
+        const request = indexedDB.open('LagonoyMDRRMODB', 1);
+        request.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains('photos')) {
+            const store = db.createObjectStore('photos', { keyPath: 'id' });
+            store.createIndex('timestamp', 'timestamp', { unique: false });
+          }
+        };
+        request.onsuccess = (e) => {
+          STATE.db = e.target.result;
+          updateGalleryBadgeCount();
+          resolve(STATE.db);
+        };
+        request.onerror = (e) => reject(e);
+      });
+    }
+
+    function savePhotoToStorage(photoRecord) {
+      return new Promise((resolve, reject) => {
+        if (!STATE.db) return reject('No DB handle');
+        const tx = STATE.db.transaction('photos', 'readwrite');
+        const store = tx.objectStore('photos');
+        const req = store.add(photoRecord);
+        req.onsuccess = () => {
+          updateGalleryBadgeCount();
+          resolve(req.result);
+        };
+        req.onerror = (e) => reject(e);
+      });
+    }
+
+    function getAllPhotosFromStorage() {
+      return new Promise((resolve, reject) => {
+        if (!STATE.db) return resolve([]);
+        const tx = STATE.db.transaction('photos', 'readonly');
+        const store = tx.objectStore('photos');
+        const index = store.index('timestamp');
+        const req = index.getAll();
+        req.onsuccess = () => resolve(req.result.reverse());
+        req.onerror = (e) => reject(e);
+      });
+    }
+
+    function deletePhotoFromStorage(id) {
+      return new Promise((resolve, reject) => {
+        if (!STATE.db) return reject('No DB');
+        const tx = STATE.db.transaction('photos', 'readwrite');
+        const store = tx.objectStore('photos');
+        const req = store.delete(id);
+        req.onsuccess = () => {
+          updateGalleryBadgeCount();
+          resolve();
+        };
+        req.onerror = (e) => reject(e);
+      });
+    }
+
+    async function updateGalleryBadgeCount() {
+      const photos = await getAllPhotosFromStorage();
+      if (photos.length > 0) {
+        DOM.galleryBadge.textContent = photos.length;
+        DOM.galleryBadge.classList.remove('hidden');
+      } else {
+        DOM.galleryBadge.classList.add('hidden');
+      }
+      DOM.galleryCount.textContent = photos.length;
+    }
+
+    /* ==========================================================================
+       2. HARDWARE CAMERA & ZOOM CONTROLS
+       ========================================================================== */
+    async function startCamera() {
+      if (STATE.stream) {
+        STATE.stream.getTracks().forEach(track => track.stop());
+      }
+
+      const constraints = {
+        video: {
+          facingMode: STATE.facingMode,
+          width: { ideal: 1920 },
+          height: { ideal: 1080 }
+        },
+        audio: false
+      };
+
+      try {
+        STATE.stream = await navigator.mediaDevices.getUserMedia(constraints);
+        DOM.video.srcObject = STATE.stream;
+        await DOM.video.play();
+        applyZoomLevel(STATE.zoomLevel);
+      } catch (err) {
+        console.error('Camera access failed:', err);
+        showToast('Camera Access Denied or Unavailable!', 'error');
+      }
+    }
+
+    async function applyZoomLevel(zoomVal) {
+      STATE.zoomLevel = zoomVal;
+      updateZoomButtonsUI(zoomVal);
+
+      if (!STATE.stream) return;
+      const track = STATE.stream.getVideoTracks()[0];
+      const capabilities = track.getCapabilities ? track.getCapabilities() : {};
+
+      // Hardware Zoom support check
+      if (capabilities.zoom) {
+        try {
+          const minZoom = capabilities.zoom.min || 1;
+          const maxZoom = capabilities.zoom.max || 3;
+          const targetZoom = Math.min(Math.max(zoomVal, minZoom), maxZoom);
+          await track.applyConstraints({ advanced: [{ zoom: targetZoom }] });
+          DOM.video.style.transform = 'none'; // reset CSS scale fallback
+          return;
+        } catch (e) {
+          console.warn('Hardware zoom failed, falling back to digital crop:', e);
+        }
+      }
+
+      // Digital CSS Zoom fallback for live view
+      DOM.video.style.transform = `scale(${zoomVal})`;
+    }
+
+    function updateZoomButtonsUI(selectedZoom) {
+      [DOM.btnZoom1, DOM.btnZoom15, DOM.btnZoom2].forEach(btn => {
+        btn.className = 'px-3 py-1 rounded-full text-xs font-bold text-slate-300 hover:text-white transition';
+      });
+      if (selectedZoom === 1.0) DOM.btnZoom1.className = 'px-3 py-1 rounded-full text-xs font-bold text-slate-950 bg-mdrrmo-orange shadow';
+      if (selectedZoom === 1.5) DOM.btnZoom15.className = 'px-3 py-1 rounded-full text-xs font-bold text-slate-950 bg-mdrrmo-orange shadow';
+      if (selectedZoom === 2.0) DOM.btnZoom2.className = 'px-3 py-1 rounded-full text-xs font-bold text-slate-950 bg-mdrrmo-orange shadow';
+    }
+
+    function toggleCameraFacing() {
+      STATE.facingMode = STATE.facingMode === 'environment' ? 'user' : 'environment';
+      startCamera();
+      showToast(`Switched to ${STATE.facingMode === 'environment' ? 'Rear' : 'Front'} Camera`);
+    }
+
+    async function toggleTorchFlash() {
+      if (!STATE.stream) return;
+      const track = STATE.stream.getVideoTracks()[0];
+      const capabilities = track.getCapabilities ? track.getCapabilities() : {};
+
+      if (!capabilities.torch) {
+        showToast('Torch flash not supported on this device', 'error');
+        return;
+      }
+
+      try {
+        STATE.torchOn = !STATE.torchOn;
+        await track.applyConstraints({ advanced: [{ torch: STATE.torchOn }] });
+        const icon = document.getElementById('flash-icon');
+        if (STATE.torchOn) {
+          icon.setAttribute('data-lucide', 'zap');
+          DOM.btnFlashToggle.classList.add('text-mdrrmo-orange', 'border-mdrrmo-orange');
+        } else {
+          icon.setAttribute('data-lucide', 'zap-off');
+          DOM.btnFlashToggle.classList.remove('text-mdrrmo-orange', 'border-mdrrmo-orange');
+        }
+        lucide.createIcons();
+      } catch (e) {
+        showToast('Failed to toggle flash', 'error');
+      }
+    }
+
+    /* ==========================================================================
+       3. HARDWARE GPS & REAL-TIME TIMESTAMP ENGINE
+       ========================================================================== */
+    function initGeolocationWatcher() {
+      if (!('geolocation' in navigator)) {
+        STATE.currentGps.status = 'GPS Not Supported';
+        updateGpsUI();
+        return;
+      }
+
+      navigator.geolocation.watchPosition(
+        (position) => {
+          const { latitude, longitude, altitude, accuracy } = position.coords;
+          STATE.currentGps.lat = latitude.toFixed(6);
+          STATE.currentGps.lng = longitude.toFixed(6);
+          STATE.currentGps.alt = altitude ? `${altitude.toFixed(1)}m` : 'N/A';
+          STATE.currentGps.acc = `${accuracy.toFixed(1)}m`;
+          STATE.currentGps.status = 'GPS Active';
+          updateGpsUI();
+        },
+        (error) => {
+          console.warn('GPS position error:', error.message);
+          STATE.currentGps.status = 'No Satellite Lock';
+          updateGpsUI();
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      );
+    }
+
+    function updateGpsUI() {
+      if (STATE.currentGps.lat && STATE.currentGps.lng) {
+        DOM.wmGps.textContent = `LAT: ${STATE.currentGps.lat}°  LON: ${STATE.currentGps.lng}° (±${STATE.currentGps.acc})`;
+        DOM.headerStatus.textContent = `GPS: READY (${STATE.currentGps.lat}, ${STATE.currentGps.lng})`;
+        DOM.headerStatus.className = 'text-[10px] text-emerald-300 font-mono truncate max-w-[180px]';
+      } else {
+        DOM.wmGps.textContent = `GPS: Searching... (${STATE.currentGps.status})`;
+        DOM.headerStatus.textContent = `GPS: SEARCHING...`;
+        DOM.headerStatus.className = 'text-[10px] text-amber-300 font-mono truncate max-w-[180px]';
+      }
+    }
+
+    function startClock() {
+      const updateDateTime = () => {
+        const now = new Date();
+        const formatted = now.getFullYear() + '-' +
+          String(now.getMonth() + 1).padStart(2, '0') + '-' +
+          String(now.getDate()).padStart(2, '0') + ' ' +
+          String(now.getHours()).padStart(2, '0') + ':' +
+          String(now.getMinutes()).padStart(2, '0') + ':' +
+          String(now.getSeconds()).padStart(2, '0');
+        DOM.wmDateTime.textContent = formatted;
+      };
+      updateDateTime();
+      setInterval(updateDateTime, 1000);
+    }
+
+    /* ==========================================================================
+       4. CANVAS STAMPING ENGINE & MDRRMO BANNER DRAWER
+       ========================================================================== */
+    async function captureAndStampPhoto() {
+      if (!DOM.video.videoWidth) return;
+
+      const fullWidth = DOM.video.videoWidth;
+      const fullHeight = DOM.video.videoHeight;
+
+      DOM.canvas.width = fullWidth;
+      DOM.canvas.height = fullHeight;
+      const ctx = DOM.canvas.getContext('2d');
+
+      // 1. Digital Zoom Crop Calculation if hardware zoom is not active
+      const track = STATE.stream ? STATE.stream.getVideoTracks()[0] : null;
+      const capabilities = track && track.getCapabilities ? track.getCapabilities() : {};
+      
+      if (!capabilities.zoom && STATE.zoomLevel > 1.0) {
+        // Perform digital crop onto canvas
+        const cropW = fullWidth / STATE.zoomLevel;
+        const cropH = fullHeight / STATE.zoomLevel;
+        const cropX = (fullWidth - cropW) / 2;
+        const cropY = (fullHeight - cropH) / 2;
+        ctx.drawImage(DOM.video, cropX, cropY, cropW, cropH, 0, 0, fullWidth, fullHeight);
+      } else {
+        // Direct draw full stream
+        ctx.drawImage(DOM.video, 0, 0, fullWidth, fullHeight);
+      }
+
+      const scale = Math.max(fullWidth / 1280, 0.8);
+
+      // 2. Draw GPS Metadata Box at Top-Left or Bottom-Left above banner
+      drawMetadataBox(ctx, fullWidth, fullHeight, scale);
+
+      // 3. Draw MDRRMO Bottom Banner Overlay
+      if (STATE.settings.customBannerBase64) {
+        // Render custom uploaded banner
+        try {
+          const bannerImg = await loadImage(STATE.settings.customBannerBase64);
+          const bannerH = 140 * scale;
+          ctx.drawImage(bannerImg, 0, fullHeight - bannerH, fullWidth, bannerH);
+        } catch (e) {
+          drawBuiltInMdrrmoBanner(ctx, fullWidth, fullHeight, scale);
+        }
+      } else {
+        // Render built-in LGU Lagonoy MDRRMO official banner drawer
+        drawBuiltInMdrrmoBanner(ctx, fullWidth, fullHeight, scale);
+      }
+
+      // Convert Canvas to Data URL
+      const dataUrl = DOM.canvas.toDataURL('image/jpeg', 0.92);
+      const photoRecord = {
+        id: 'photo_' + Date.now(),
+        timestamp: Date.now(),
+        formattedDate: DOM.wmDateTime.textContent,
+        gps: { ...STATE.currentGps },
+        dataUrl: dataUrl
+      };
+
+      await savePhotoToStorage(photoRecord);
+
+      // Automatic Download Trigger
+      const downloadLink = document.createElement('a');
+      downloadLink.download = `MDRRMO_Lagonoy_${Date.now()}.jpg`;
+      downloadLink.href = dataUrl;
+      downloadLink.click();
+
+      showToast('Photo Saved & Downloaded to Storage!');
+    }
+
+    function drawMetadataBox(ctx, fullWidth, fullHeight, scale) {
+      const margin = 20 * scale;
+      const padding = 16 * scale;
+      
+      const titleText = STATE.settings.officeTitle.toUpperCase();
+      const gpsText = STATE.currentGps.lat 
+        ? `LAT: ${STATE.currentGps.lat}°  LON: ${STATE.currentGps.lng}° (±${STATE.currentGps.acc}) ALT: ${STATE.currentGps.alt}`
+        : 'GPS: Satellite Lock Pending';
+      const timeText = `TIMESTAMP: ${DOM.wmDateTime.textContent}`;
+      const contactText = STATE.settings.contact;
+
+      ctx.font = `bold ${Math.round(15 * scale)}px monospace`;
+      const titleWidth = ctx.measureText(titleText).width;
+      ctx.font = `${Math.round(12 * scale)}px monospace`;
+      const gpsWidth = ctx.measureText(gpsText).width;
+
+      const boxWidth = Math.max(titleWidth, gpsWidth) + (padding * 2);
+      const boxHeight = 105 * scale;
+      const x = margin;
+      const y = fullHeight - (140 * scale) - boxHeight - margin; // Right above bottom banner
+
+      ctx.save();
+      // Dark Box Background
+      ctx.fillStyle = 'rgba(6, 22, 14, 0.88)';
+      ctx.strokeStyle = '#046a3c';
+      ctx.lineWidth = 2 * scale;
+      ctx.beginPath();
+      ctx.roundRect(x, y, boxWidth, boxHeight, 8 * scale);
+      ctx.fill();
+      ctx.stroke();
+
+      // Text Layers
+      let textY = y + padding + (10 * scale);
+      ctx.fillStyle = '#fc7c04';
+      ctx.font = `bold ${Math.round(15 * scale)}px monospace`;
+      ctx.fillText(titleText, x + padding, textY);
+
+      textY += 20 * scale;
+      ctx.fillStyle = '#34d399';
+      ctx.font = `bold ${Math.round(12 * scale)}px monospace`;
+      ctx.fillText(gpsText, x + padding, textY);
+
+      textY += 18 * scale;
+      ctx.fillStyle = '#e2e8f0';
+      ctx.font = `${Math.round(11 * scale)}px monospace`;
+      ctx.fillText(timeText, x + padding, textY);
+
+      textY += 18 * scale;
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = `${Math.round(10 * scale)}px monospace`;
+      ctx.fillText(contactText, x + padding, textY);
+
+      ctx.restore();
+    }
+
+    function drawBuiltInMdrrmoBanner(ctx, fullWidth, fullHeight, scale) {
+      const bannerHeight = 130 * scale;
+      const topOrangeHeight = 32 * scale;
+      const greenHeight = bannerHeight - topOrangeHeight;
+      const startY = fullHeight - bannerHeight;
+
+      ctx.save();
+
+      // 1. Top Orange Header Strip
+      ctx.fillStyle = '#fc7c04';
+      ctx.fillRect(0, startY, fullWidth, topOrangeHeight);
+
+      // Top Strip Text
+      const headerString = "DISASTER PREVENTION & MITIGATION | DISASTER PREPAREDNESS | DISASTER RESPONSE | DISASTER REHABILITATION & RECOVERY";
+      ctx.fillStyle = '#06160e';
+      ctx.font = `bold ${Math.round(11 * scale)}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillText(headerString, fullWidth / 2, startY + (20 * scale));
+
+      // 2. Main Dark Green MDRRMO Section
+      const greenY = startY + topOrangeHeight;
+      ctx.fillStyle = '#034d2b';
+      ctx.fillRect(0, greenY, fullWidth, greenHeight);
+
+      // Yellow Accent Top Border
+      ctx.fillStyle = '#ffcc00';
+      ctx.fillRect(0, greenY, fullWidth, 3 * scale);
+
+      // LGU Lagonoy Text Line 1
+      ctx.textAlign = 'left';
+      ctx.fillStyle = '#ffffff';
+      ctx.font = `bold ${Math.round(16 * scale)}px sans-serif`;
+      ctx.fillText("LOCAL GOVERNMENT UNIT OF LAGONOY", 40 * scale, greenY + (35 * scale));
+
+      // Lagonoy MDRRMO Text Line 2
+      ctx.fillStyle = '#ffcc00';
+      ctx.font = `black ${Math.round(18 * scale)}px sans-serif`;
+      ctx.fillText("MUNICIPAL DISASTER RISK REDUCTION AND MANAGEMENT OFFICE", 40 * scale, greenY + (65 * scale));
+
+      // Motto Slogan (Right Side)
+      ctx.textAlign = 'right';
+      ctx.fillStyle = '#e2e8f0';
+      ctx.font = `bold ${Math.round(13 * scale)}px sans-serif`;
+      ctx.fillText("Resilience Through Preparedness,", fullWidth - (30 * scale), greenY + (35 * scale));
+      ctx.fillText("Safety Through Service.", fullWidth - (30 * scale), greenY + (58 * scale));
+
+      // Vertical Accent Divider Line
+      ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+      ctx.lineWidth = 2 * scale;
+      ctx.beginPath();
+      ctx.moveTo(fullWidth - (15 * scale), greenY + (15 * scale));
+      ctx.lineTo(fullWidth - (15 * scale), greenY + greenHeight - (15 * scale));
+      ctx.stroke();
+
+      ctx.restore();
+    }
+
+    function loadImage(src) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = (e) => reject(e);
+        img.src = src;
+      });
+    }
+
+    /* ==========================================================================
+       5. SETTINGS & GALLERY UI LOGIC
+       ========================================================================== */
+    function loadSavedSettings() {
+      const stored = localStorage.getItem('LagonoyMDRRMOSettings');
+      if (stored) {
+        try {
+          STATE.settings = { ...STATE.settings, ...JSON.parse(stored) };
+        } catch (e) {
+          console.error(e);
+        }
+      }
+      applySettingsToUI();
+    }
+
+    function applySettingsToUI() {
+      DOM.inputOfficeTitle.value = STATE.settings.officeTitle;
+      DOM.inputContact.value = STATE.settings.contact;
+      DOM.wmOfficeTitle.textContent = STATE.settings.officeTitle;
+      DOM.wmContact.textContent = STATE.settings.contact;
+
+      if (STATE.settings.customBannerBase64) {
+        DOM.settingsBannerPreview.innerHTML = `<img src="${STATE.settings.customBannerBase64}" class="w-full h-full object-cover">`;
+        DOM.btnRemoveBanner.classList.remove('hidden');
+      } else {
+        DOM.settingsBannerPreview.innerHTML = `<i data-lucide="image" class="w-6 h-6 text-slate-600"></i>`;
+        DOM.btnRemoveBanner.classList.add('hidden');
+        lucide.createIcons();
+      }
+    }
+
+    function saveSettings() {
+      STATE.settings.officeTitle = DOM.inputOfficeTitle.value.trim();
+      STATE.settings.contact = DOM.inputContact.value.trim();
+      localStorage.setItem('LagonoyMDRRMOSettings', JSON.stringify(STATE.settings));
+      applySettingsToUI();
+      DOM.modalSettings.classList.add('hidden');
+      showToast('MDRRMO Configuration Saved');
+    }
+
+    async function openGalleryModal() {
+      const photos = await getAllPhotosFromStorage();
+      DOM.galleryGrid.innerHTML = '';
+
+      if (photos.length === 0) {
+        DOM.galleryEmpty.classList.remove('hidden');
+      } else {
+        DOM.galleryEmpty.classList.add('hidden');
+        photos.forEach(photo => {
+          const card = document.createElement('div');
+          card.className = 'relative aspect-square rounded-lg bg-slate-900 border border-slate-800 overflow-hidden cursor-pointer group hover:border-mdrrmo-orange transition';
+          card.innerHTML = `
+            <img src="${photo.dataUrl}" class="w-full h-full object-cover" alt="Captured Stamped Photo">
+            <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-90 p-2 flex flex-col justify-end text-[10px] text-white">
+              <span class="font-bold text-mdrrmo-orange truncate">${photo.formattedDate}</span>
+            </div>
+          `;
+          card.addEventListener('click', () => openPhotoDetailModal(photo));
+          DOM.galleryGrid.appendChild(card);
+        });
+      }
+      DOM.modalGallery.classList.remove('hidden');
+    }
+
+    function openPhotoDetailModal(photo) {
+      STATE.activePhotoId = photo.id;
+      DOM.detailImageView.src = photo.dataUrl;
+      DOM.detailTimestamp.textContent = `Captured: ${photo.formattedDate}`;
+      DOM.modalPhotoDetail.classList.remove('hidden');
+    }
+
+    async function deleteActivePhoto() {
+      if (!STATE.activePhotoId) return;
+      await deletePhotoFromStorage(STATE.activePhotoId);
+      DOM.modalPhotoDetail.classList.add('hidden');
+      openGalleryModal();
+      showToast('Photo deleted');
+    }
+
+    function downloadActivePhoto() {
+      if (!STATE.detailImageView.src) return;
+      const link = document.createElement('a');
+      link.download = `MDRRMO_Lagonoy_${Date.now()}.jpg`;
+      link.href = DOM.detailImageView.src;
+      link.click();
+      showToast('Downloading stamped image...');
+    }
+
+    function showToast(message, type = 'info') {
+      const toast = document.createElement('div');
+      const bg = type === 'error' ? 'bg-rose-900/90 border-rose-700' : 'bg-slate-900/90 border-mdrrmo-orange';
+      toast.className = `p-3 rounded-lg border text-xs text-white shadow-xl backdrop-blur flex items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-200 ${bg}`;
+      toast.innerHTML = `
+        <i data-lucide="${type === 'error' ? 'alert-circle' : 'check-circle'}" class="w-4 h-4 text-mdrrmo-orange"></i>
+        <span>${message}</span>
+      `;
+      DOM.toastContainer.appendChild(toast);
+      lucide.createIcons();
+
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'transition-opacity');
+        setTimeout(() => toast.remove(), 300);
+      }, 3000);
+    }
+
+    /* ==========================================================================
+       6. INITIALIZATION & EVENT BINDINGS
+       ========================================================================== */
+    function bindEvents() {
+      DOM.btnCapture.addEventListener('click', captureAndStampPhoto);
+      DOM.btnSwitchCam.addEventListener('click', toggleCameraFacing);
+      DOM.btnFlashToggle.addEventListener('click', toggleTorchFlash);
+
+      DOM.btnZoom1.addEventListener('click', () => applyZoomLevel(1.0));
+      DOM.btnZoom15.addEventListener('click', () => applyZoomLevel(1.5));
+      DOM.btnZoom2.addEventListener('click', () => applyZoomLevel(2.0));
+
+      DOM.btnSettingsTrigger.addEventListener('click', () => DOM.modalSettings.classList.remove('hidden'));
+      DOM.btnCloseSettings.addEventListener('click', () => DOM.modalSettings.classList.add('hidden'));
+      DOM.btnSaveSettings.addEventListener('click', saveSettings);
+
+      DOM.inputBannerFile.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            STATE.settings.customBannerBase64 = event.target.result;
+            applySettingsToUI();
+          };
+          reader.readAsDataURL(file);
+        }
+      });
+
+      DOM.btnRemoveBanner.addEventListener('click', () => {
+        STATE.settings.customBannerBase64 = null;
+        DOM.inputBannerFile.value = '';
+        applySettingsToUI();
+      });
+
+      DOM.btnGalleryTrigger.addEventListener('click', openGalleryModal);
+      DOM.btnCloseGallery.addEventListener('click', () => DOM.modalGallery.classList.add('hidden'));
+
+      DOM.btnCloseDetail.addEventListener('click', () => DOM.modalPhotoDetail.classList.add('hidden'));
+      DOM.btnDeletePhoto.addEventListener('click', deleteActivePhoto);
+      DOM.btnDownloadPhoto.addEventListener('click', downloadActivePhoto);
+    }
+
+    window.addEventListener('load', async () => {
+      DOM.toastContainer = document.getElementById('toast-container');
+      loadSavedSettings();
+      bindEvents();
+      startClock();
+      initGeolocationWatcher();
+      await initDatabase();
+      await startCamera();
+    });
+  </script>
+</body>
+</html>
